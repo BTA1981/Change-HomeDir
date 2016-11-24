@@ -1,0 +1,35 @@
+import-module activedirectory
+[string]$DateStr = (Get-Date).ToString("s").Replace(":","-") # +"_" # Easy sortable date string
+Start-Transcript ('c:\windows\temp\' + "$Datestr" + '_Change-HomeDir.log') # Start logging
+
+$TargetOU = "OU=Test Accounts,OU=Domain Accounts,DC=domain,DC=local"
+$Users = Get-ADUser -Filter {Enabled -eq $true} -SearchBase $targetou -Properties UserPrincipalname, HomeDirectory
+
+ForEach ($User in $Users) { 
+    Try { 
+        #$ErrorActionPreference = 'stop'
+        $Homedir = $User.Homedirectory
+        $UPN = $User.UserPrincipalName
+        Write-Host "Processing [$UPN].." -Fore yellow
+
+        If ($Homedir.StartsWith("\\nkfil02\Homedir$\") -eq $True) {
+            $HomedirNEW = $Homedir.Replace("\\FS\Homedir$\", "\\domain.local\dfs\home\")
+        
+            Write-Output "Old Homedir: [$Homedir]"
+            Write-Output "New Homedir: [$HomedirNEW]"
+
+            $LoginName = $($UPN.split("@"))[0]
+            If ($LoginName.Length -gt 20) { # Change login name if it exceeds 20 characters 
+                $LoginName = $LoginName.Substring(0,20)
+                Write-Output "Shorten login name to [$LoginName]"
+            }
+            Set-Aduser -identity $LoginName -homedirectory $HomeDirNEW -whatif
+        } # End If 
+        Else { Write-Output "$UPN already has the following homedir: [$Homedir]" } # End Else
+
+    } # End Try
+    Catch [System.Management.Automation.RuntimeException] { # Catch exeption and log to file
+        Write-Output "$UPN has no homedir or something else went wrong" | out-file c:\temp\NoHomeDirUsers.log -append
+        Write-Output "$UPN has no homedir or something else went wrong. Please check current homedrive of user."
+    } # End Catch
+} # End ForEach
